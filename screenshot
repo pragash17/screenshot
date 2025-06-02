@@ -1,0 +1,61 @@
+// server/index.js
+const express = require("express");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+const screenshotRouter = require("./screenshot");
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors());
+app.use(bodyParser.json());
+app.use("/api/screenshot", screenshotRouter);
+
+app.get("/", (req, res) => {
+  res.send("Screenshot Micro-SaaS API is running 🚀");
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
+
+// server/screenshot.js
+const express = require("express");
+const router = express.Router();
+const puppeteer = require("puppeteer");
+const fs = require("fs");
+const path = require("path");
+const { v4: uuidv4 } = require("uuid");
+
+router.post("/", async (req, res) => {
+  const { url, fullPage = true, delay = 0, device = "desktop", format = "png" } = req.body;
+
+  if (!url) return res.status(400).json({ error: "URL is required" });
+
+  const fileName = `${uuidv4()}.${format}`;
+  const filePath = path.join(__dirname, "screenshots", fileName);
+
+  try {
+    const browser = await puppeteer.launch({ headless: "new" });
+    const page = await browser.newPage();
+
+    if (device === "mobile") {
+      await page.setViewport({ width: 375, height: 812 });
+    } else {
+      await page.setViewport({ width: 1280, height: 800 });
+    }
+
+    await page.goto(url, { waitUntil: "networkidle2" });
+    if (delay > 0) await page.waitForTimeout(delay * 1000);
+
+    await page.screenshot({ path: filePath, fullPage, type: format });
+    await browser.close();
+
+    res.json({ message: "Screenshot captured", file: `/screenshots/${fileName}` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to capture screenshot" });
+  }
+});
+
+module.exports = router;
